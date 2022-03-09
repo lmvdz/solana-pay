@@ -1,3 +1,4 @@
+import { Wallet } from "@zetamarkets/sdk";
 import { createTransferCheckedInstruction, getAccount, getAssociatedTokenAddress, getMint, MintLayout, TOKEN_PROGRAM_ID, createAssociatedTokenAccountInstruction, createInitializeMintInstruction, createMintToInstruction} from '@solana/spl-token';
 import {
     Connection,
@@ -11,7 +12,7 @@ import {
     TransactionInstruction,
 } from '@solana/web3.js';
 import BigNumber from 'bignumber.js';
-import { getCandyMachineState, getMasterEdition, getMetadata, getTokenWallet } from './candymachine';
+import { getCandyMachineState, getMasterEdition, getMetadata, getTokenWallet, mintOneToken } from './candymachine';
 import { MEMO_PROGRAM_ID, SOL_DECIMALS, TEN, TOKEN_METADATA_PROGRAM_ID } from './constants';
 
 /**
@@ -34,13 +35,7 @@ export interface CreatePayTransactionParams {
 }
 
 export interface CreateMintTransactionParams {
-    candymachineId: PublicKey, 
-    config: PublicKey, 
-    treasury: PublicKey
-    /** `reference` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#reference) */
-    reference?: PublicKey | PublicKey[];
-    /** `memo` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#memo) */
-    memo?: string;
+    candymachineId: PublicKey | undefined
 }
 
 
@@ -53,108 +48,61 @@ export interface CreateMintTransactionParams {
  * @returns 
  */
 
-export async function createMintTransaction(connection: Connection, payer: PublicKey, recipient: PublicKey, {  candymachineId, config, treasury, reference, memo } : CreateMintTransactionParams): Promise<Transaction> {
+export async function createMintTransaction(connection: Connection, payer: Keypair, {  candymachineId } : CreateMintTransactionParams): Promise<{ transaction: Transaction, cleanupTransaction: Transaction | undefined, signers: Array<Keypair> }> {
     // Check that the payer and recipient accounts exist
-    const payerInfo = await connection.getAccountInfo(payer);
+    const payerInfo = await connection.getAccountInfo(payer.publicKey);
     if (!payerInfo) throw new CreateTransactionError('payer not found');
 
-    const recipientInfo = await connection.getAccountInfo(recipient);
-    if (!recipientInfo) throw new CreateTransactionError('recipient not found');
 
-    const missingParams = [candymachineId, config, treasury].filter(param => param === undefined);
+    const missingParams = [candymachineId].filter(param => param === undefined);
+
     if (missingParams.length > 0) {
         throw new CreateTransactionError(missingParams.join(', ') + ' undefined in CreateMintTransactionParams');
     }
 
-    const candyMachineState = await getCandyMachineState(candymachineId, connection);
-    const itemsAvailable = (await candyMachineState).itemsAvailable;
-    if (itemsAvailable === 0) {
+    const candyMachineState = await getCandyMachineState(candymachineId!, connection, new Wallet(payer));
+
+    const itemsRemaining = (await candyMachineState).itemsRemaining;
+    if (itemsRemaining === 0) {
         throw new CreateTransactionError('No items left to mint!');
+    } else {
+        console.log(`There are still ${itemsRemaining} nfts left to mint.`);
     }
-    const mint = Keypair.generate();
-    const token = await getTokenWallet(payer, mint.publicKey);
-    const program = (await candyMachineState).candyMachine.program;
-    const metadata = await getMetadata(mint.publicKey);
-    const masterEdition = await getMasterEdition(mint.publicKey);
 
-    const rent = await connection.getMinimumBalanceForRentExemption(
-        MintLayout.span
-    );
+    
+    
+    const { instructions, cleanupInstructions, signers } = await mintOneToken(candyMachineState, new Wallet(payer));
+    
 
-    const transactionIX = program.instruction.mintNft({
-        accounts: {
-            config,
-            candyMachine: candyMachineState.candyMachine.id,
-            payer: payer,
-            wallet: treasury,
-            mint: mint.publicKey,
-            metadata,
-            masterEdition,
-            mintAuthority: payer,
-            updateAuthority: payer,
-            tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            rent: SYSVAR_RENT_PUBKEY,
-            clock: SYSVAR_CLOCK_PUBKEY,
-        },
-        signers: [mint],
-        instructions: [
-            SystemProgram.createAccount({
-                fromPubkey: payer,
-                newAccountPubkey: mint.publicKey,
-                space: MintLayout.span,
-                lamports: rent,
-                programId: TOKEN_PROGRAM_ID,
-            }),
-            createInitializeMintInstruction(
-                mint.publicKey,
-                0,
-                payer,
-                payer,
-                TOKEN_PROGRAM_ID,
-            ),
-            createAssociatedTokenAccountInstruction(
-                token,
-                payer,
-                payer,
-                mint.publicKey
-            ),
-            createMintToInstruction(
-                mint.publicKey,
-                token,
-                payer,
-                1,
-                [],
-                TOKEN_PROGRAM_ID,
-            ),
-        ],
-    });
     // If reference accounts are provided, add them to the transfer instruction
-    if (reference) {
-        if (!Array.isArray(reference)) {
-            reference = [reference];
-        }
+    
+    // if (reference) {
+    //     if (!Array.isArray(reference)) {
+    //         reference = [reference];
+    //     }
 
-        for (const pubkey of reference) {
-            transactionIX.keys.push({ pubkey, isWritable: false, isSigner: false });
-        }
-    }
+    //     for (const pubkey of reference) {
+    //         instructions[instructions.length-1].keys.push({ pubkey, isWritable: false, isSigner: false });
+    //     }
+    // }
+
     const transaction = new Transaction();
 
-    if (memo != null) {
-        transaction.add(
-            new TransactionInstruction({
-                programId: MEMO_PROGRAM_ID,
-                keys: [],
-                data: Buffer.from(memo, 'utf8'),
-            })
-        );
-    }
+    // can't add memo because of candy-machine
+    // if (memo != null) {
+    //     transaction.add(
+    //         new TransactionInstruction({
+    //             programId: MEMO_PROGRAM_ID,
+    //             keys: [],
+    //             data: Buffer.from(memo, 'utf8'),
+    //         })
+    //     );
+    // }
 
-    transaction.add(transactionIX);
+    transaction.add(...instructions);
+
     
-    return transaction;
+    return { transaction, cleanupTransaction: (cleanupInstructions.length > 0 ? (new Transaction().add(...cleanupInstructions)) : undefined), signers };
 
 }
 

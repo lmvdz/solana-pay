@@ -1,4 +1,4 @@
-import { Connection, LAMPORTS_PER_SOL, sendAndConfirmTransaction } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL, sendAndConfirmRawTransaction, sendAndConfirmTransaction, Signer } from '@solana/web3.js';
 import { createMintTransaction, parseMintURL } from '../../src';
 import { CUSTOMER_WALLET } from './constants';
 
@@ -7,9 +7,9 @@ export async function simulateWalletInteraction(connection: Connection, url: str
      * For example only
      *
      * The URL that triggers the wallet interaction; follows the Solana Pay URL scheme
-     * The parameters needed to create the correct transaction is encoded within the URL
+     * The parameters needed to create the correct nft mint transaction is encoded within the URL
      */
-    const { recipient, message, memo, candymachineId, config, treasury, reference, label } = parseMintURL(url);
+    const { message, candymachineId, label } = parseMintURL(url);
     console.log('label: ', label);
     console.log('message: ', message);
 
@@ -21,18 +21,24 @@ export async function simulateWalletInteraction(connection: Connection, url: str
     await getPayer(connection);
 
     /**
-     * Create the transaction with the parameters decoded from the URL
+     * Create the nft mint transaction with the parameters decoded from the URL
      */
-    const tx = await createMintTransaction(connection, CUSTOMER_WALLET.publicKey, recipient, {
-        candymachineId, config, treasury,
-        reference,
-        memo,
-    });
+    const { transaction, cleanupTransaction, signers } = await createMintTransaction(connection, CUSTOMER_WALLET, { candymachineId });
+
+    // add the required paramters to the transaction (here we're using send raw transaction)
+    transaction.feePayer = CUSTOMER_WALLET.publicKey
+    transaction.recentBlockhash = (await connection.getRecentBlockhash()).blockhash
+    transaction.sign(...signers)
 
     /**
-     * Send the transaction to the network
+     * Send the nft mint transaction to the network
      */
-    sendAndConfirmTransaction(connection, tx, [CUSTOMER_WALLET]);
+    const txSig = await sendAndConfirmRawTransaction(connection, transaction.serialize(), { skipPreflight: true });
+    
+    /**
+     * return the txSig, and if there are any cleanupInstructions send the cleanupTransaction transaction
+     */
+    return { txSig, cleanupSig: cleanupTransaction !== undefined ? await sendAndConfirmTransaction(connection, cleanupTransaction, [], { skipPreflight: true }) : undefined };
 }
 
 async function getPayer(connection: Connection) {

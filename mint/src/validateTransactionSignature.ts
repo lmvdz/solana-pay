@@ -8,6 +8,7 @@ import {
     TransactionSignature,
 } from '@solana/web3.js';
 import BigNumber from 'bignumber.js';
+import { getCandyMachineState } from './candymachine';
 
 /**
  * Thrown when a transaction doesn't contain a valid Solana Pay transfer.
@@ -16,24 +17,22 @@ export class ValidateTransactionSignatureError extends Error {
     name = 'ValidateTransactionSignatureError';
 }
 
-
-
-export async function validateMintTransactionSignature(connection: Connection, signature: TransactionSignature, recipient: PublicKey, candymachineId: PublicKey, config: PublicKey, treasury: PublicKey, reference?: PublicKey | PublicKey[], finality?: Finality): Promise<TransactionResponse> {
+export async function validateCleanupMintTransactionSignature(connection: Connection, signature: TransactionSignature, recipient: PublicKey, candyMachineId: PublicKey, finality?: Finality): Promise<TransactionResponse> {
     const response = await connection.getTransaction(signature, { commitment: finality });
     if (!response) throw new ValidateTransactionSignatureError('not found');
     if (!response.meta) throw new ValidateTransactionSignatureError('missing meta');
     if (response.meta.err) throw response.meta.err;
 
-    if (reference) {
-        if (!Array.isArray(reference)) {
-            reference = [reference];
-        }
+    return response;
+    
+}
 
-        for (const pubkey of reference) {
-            if (!response.transaction.message.accountKeys.some((accountKey) => accountKey.equals(pubkey)))
-                throw new ValidateTransactionSignatureError('reference not found');
-        }
-    }
+
+export async function validateMintTransactionSignature(connection: Connection, signature: TransactionSignature, recipient: PublicKey, candymachineId: PublicKey, finality?: Finality): Promise<TransactionResponse> {
+    const response = await connection.getTransaction(signature, { commitment: finality });
+    if (!response) throw new ValidateTransactionSignatureError('not found');
+    if (!response.meta) throw new ValidateTransactionSignatureError('missing meta');
+    if (response.meta.err) throw response.meta.err;
     
     return response;
 }

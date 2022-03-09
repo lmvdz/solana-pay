@@ -30,16 +30,10 @@ export interface EncodePayURLComponents extends EncodePayURLParams {
 
 export type EncodeMintURLParams = {
     candymachineId: PublicKey,
-    config: PublicKey,
-    treasury: PublicKey
-    /** `reference` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#reference) */
-    reference?: PublicKey | PublicKey[];
     /** `label` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#label) */
     label?: string;
     /** `message` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#message)  */
     message?: string;
-    /** `memo` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#memo) */
-    memo?: string;
 }
 
 export interface EncodeMintURLComponents extends EncodeMintURLParams {
@@ -58,32 +52,11 @@ export function encodeMintURL({ recipient, ...params} : EncodeMintURLComponents)
     return url;
 }
 
-function encodeMintURLParams({ candymachineId, config, treasury, reference, label, message, memo }: EncodeMintURLParams): string {
+function encodeMintURLParams({ candymachineId, label, message }: EncodeMintURLParams): string {
     const params: [string, string][] = [];
 
-
-
     if (candymachineId) {
-        params.push(['spl-token', candymachineId.toBase58()]);
-    }
-
-
-    if (config) {
-        params.push(['spl-token', config.toBase58()]);
-    }
-
-    if (treasury) {
-        params.push(['spl-token', treasury.toBase58()]);
-    }
-
-    if (reference) {
-        if (!Array.isArray(reference)) {
-            reference = [reference];
-        }
-
-        for (const pubkey of reference) {
-            params.push(['reference', pubkey.toBase58()]);
-        }
+        params.push(['candymachine-id', candymachineId.toBase58()]);
     }
 
     if (label) {
@@ -92,10 +65,6 @@ function encodeMintURLParams({ candymachineId, config, treasury, reference, labe
 
     if (message) {
         params.push(['message', message]);
-    }
-
-    if (memo) {
-        params.push(['memo', memo]);
     }
     
 

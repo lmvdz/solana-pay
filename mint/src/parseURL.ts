@@ -15,16 +15,10 @@ export interface ParsedMintURL {
     /** `recipient` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#recipient) */
     recipient: PublicKey;
     candymachineId: PublicKey | undefined;
-    config: PublicKey | undefined;
-    treasury: PublicKey | undefined;
-    /** `reference` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#reference) */
-    reference: PublicKey[] | undefined;
     /** `label` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#label) */
     label: string | undefined;
     /** `message` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#message) */
     message: string | undefined;
-    /** `memo` in the [Solana Pay spec](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#memo) */
-    memo: string | undefined;
 }
 
 export function parseMintURL(url: string): ParsedMintURL {
@@ -53,50 +47,16 @@ export function parseMintURL(url: string): ParsedMintURL {
             throw new ParseURLError('token invalid');
         }
     }
-    
-    let config: PublicKey | undefined;
-    const configParam = searchParams.get('config');
-    if (configParam != null) {
-        try {
-            config = new PublicKey(configParam);
-        } catch (error) {
-            throw new ParseURLError('token invalid');
-        }
-    }
 
-    let treasury: PublicKey | undefined;
-    const treasuryParam = searchParams.get('treasury');
-    if (treasuryParam != null) {
-        try {
-            treasury = new PublicKey(treasuryParam);
-        } catch (error) {
-            throw new ParseURLError('token invalid');
-        }
-    }
-
-    let reference: PublicKey[] | undefined;
-    const referenceParam = searchParams.getAll('reference');
-    if (referenceParam.length) {
-        try {
-            reference = referenceParam.map((reference) => new PublicKey(reference));
-        } catch (error) {
-            throw new ParseURLError('reference invalid');
-        }
-    }
 
     const label = searchParams.get('label') || undefined;
     const message = searchParams.get('message') || undefined;
-    const memo = searchParams.get('memo') || undefined;
 
     return {
         recipient,
         candymachineId,
-        config,
-        treasury,
-        reference,
         label,
-        message,
-        memo
+        message
     }
 }
 
